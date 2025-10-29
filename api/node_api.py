@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template # render_template जोड़ा गया
 from uuid import uuid4
 import os 
 import requests 
@@ -23,7 +23,21 @@ node_identifier = str(uuid4()).replace('-', '')
 blockchain = Blockchain(node_address=node_identifier)
 
 # ----------------------------------------------------
-# 2. ब्लॉकचेन ऑपरेशन एंडपॉइंट्स
+# 2. UI रेंडरिंग एंडपॉइंट (नया/अपडेटेड)
+# ----------------------------------------------------
+
+# मुख्य वेब UI एंडपॉइंट
+@app.route('/', methods=['GET'])
+def index():
+    """ 
+    वेब UI (index.html) को रेंडर करता है और नोड का पता पास करता है।
+    """
+    # templates/index.html को रेंडर करें
+    return render_template('index.html', node_id=node_identifier)
+
+
+# ----------------------------------------------------
+# 3. ब्लॉकचेन ऑपरेशन एंडपॉइंट्स
 # ----------------------------------------------------
 
 # माइनिंग एंडपॉइंट
@@ -110,7 +124,7 @@ def get_address_balance(address):
 
 
 # ----------------------------------------------------
-# 3. P2P और नेटवर्क प्रबंधन एंडपॉइंट्स
+# 4. P2P और नेटवर्क प्रबंधन एंडपॉइंट्स
 # ----------------------------------------------------
 
 # नया ब्लॉक प्राप्त करने के लिए एंडपॉइंट (P2P द्वारा उपयोग किया जाता है)
@@ -182,7 +196,7 @@ def consensus():
 
 
 # ----------------------------------------------------
-# 4. App चलाना (Execution)
+# 5. App चलाना (Execution)
 # ----------------------------------------------------
 
 if __name__ == '__main__':
