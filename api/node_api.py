@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, render_template # render_template ज
 from uuid import uuid4
 import os 
 import requests 
+import argparse # CLI आर्ग्युमेंट और ENV वेरिएबल हैंडलिंग के लिए जोड़ा गया
 
 # मुख्य कोर लॉजिक को कोर डायरेक्टरी से इंपोर्ट करें
 from core.blockchain import Blockchain 
@@ -14,13 +15,36 @@ from utils.data_storage import save_blockchain
 # ----------------------------------------------------
 
 # Flask App शुरू करें
-app = Flask(__name__)
+# P2P/Render डिप्लॉयमेंट के लिए टेम्पलेट पाथ को सही करें
+app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
 # इस नोड के लिए एक अद्वितीय ID बनाएँ 
 node_identifier = str(uuid4()).replace('-', '')
 
 # Blockchain क्लास शुरू करें (यह Persistence के कारण डेटा लोड करेगी)
 blockchain = Blockchain(node_address=node_identifier)
+
+# ----------------------------------------------------
+# 1.5 P2P ऑटो-कनेक्शन लॉजिक (Render/ENV के लिए नया)
+# ----------------------------------------------------
+
+# CLI आर्ग्युमेंट्स को पार्स करें
+parser = argparse.ArgumentParser(description="MyCoin Blockchain Node")
+parser.add_argument('--connect', type=str, default=None, help='URL of an existing node to connect to')
+# Gunicorn को चलाने के लिए 'unknown' आवश्यक है
+args, unknown = parser.parse_known_args() 
+
+# ENV वेरिएबल (Render के लिए) या CLI आर्ग्युमेंट से कनेक्शन URL प्राप्त करें
+connect_node_url = os.environ.get('CONNECT_NODE', args.connect)
+
+# P2P ऑटो-कनेक्शन लॉजिक
+if connect_node_url:
+    print(f"INFO: Attempting to connect to network peer: {connect_node_url}")
+    # Node A को '/nodes/register' अनुरोध भेजने के लिए
+    blockchain.register_node(connect_node_url)
+    # वैकल्पिक: चेन को तुरंत सिंक करने का प्रयास करें
+    blockchain.resolve_conflicts()
+
 
 # ----------------------------------------------------
 # 2. UI रेंडरिंग एंडपॉइंट (नया/अपडेटेड)
@@ -141,14 +165,11 @@ def receive_new_block():
         return jsonify({'message': 'Error: Missing block data'}), 400
     
     # P2P से प्राप्त ब्लॉक को प्रोसेस करने का सबसे आसान और सुरक्षित तरीका सर्वसम्मति चलाना है।
-    # यह सुनिश्चित करता है कि प्राप्त ब्लॉक वैध है और सबसे लंबी चेन का हिस्सा है।
     replaced = blockchain.resolve_conflicts() 
 
     if replaced:
         return jsonify({'message': 'New block received, chain updated via consensus.'}), 200
     else:
-        # यदि बदला नहीं गया, तो इसका मतलब है कि या तो प्राप्त ब्लॉक छोटा है, 
-        # या हमारी चेन पहले से ही नवीनतम है।
         return jsonify({'message': 'New block received, but local chain is authoritative or block is old.'}), 200
 
 
@@ -200,7 +221,6 @@ def consensus():
 # ----------------------------------------------------
 
 if __name__ == '__main__':
-    # यह खंड केवल सीधी टेस्टिंग के लिए है। 
-    # मुख्य नोड को चलाने के लिए 'blockchain_app.py' का उपयोग करें।
+    # यह खंड केवल सीधी टेस्टिंग के लिए है।
     port = os.environ.get('PORT', 5000)
     app.run(host='0.0.0.0', port=port)
