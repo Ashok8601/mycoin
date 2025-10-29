@@ -3,7 +3,7 @@ import json
 from time import time
 from urllib.parse import urlparse
 import requests 
-from typing import Set, Dict, Any, List, Optional
+from typing import Set, Dict, Any, List, Optional ,Tuple
 # pycryptodome से SHA256 का उपयोग (इंस्टॉल करना आवश्यक है)
 from Crypto.Hash import SHA256 
 
