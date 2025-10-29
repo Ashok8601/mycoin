@@ -2,6 +2,9 @@ import requests
 import json
 import logging
 
+# यह इंपोर्ट जोड़ें (या सुनिश्चित करें कि यह utils/data_storage में मौजूद है)
+from utils.data_storage import load_blockchain_data 
+
 # नेटवर्क गतिविधि को ट्रैक करने के लिए लॉगिंग सेट करें
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
@@ -18,9 +21,13 @@ def broadcast_data(node_set, endpoint, data):
 
     # प्रत्येक पड़ोसी नोड पर लूप करें
     for node in node_set:
-        url = f'http://{node}{endpoint}'
+        # Render URL HTTPS का उपयोग करते हैं। 
+        # http:// या https:// में से सही चुनें
+        # हम यहाँ सुरक्षा के लिए HTTPS मान रहे हैं, लेकिन Render के आंतरिक कम्युनिकेशन के लिए HTTP का भी प्रयास कर सकते हैं।
+        url = f'http://{node}{endpoint}' 
         try:
             # POST रिक्वेस्ट भेजकर डेटा प्रसारित करें
+            # 5 सेकंड का टाइमआउट सेट किया गया
             response = requests.post(url, json=data, timeout=5)
             
             if response.status_code in [200, 201]:
@@ -42,10 +49,12 @@ def broadcast_transaction(blockchain_instance, transaction):
     # /transactions/new एंडपॉइंट का उपयोग करें
     endpoint = '/transactions/new'
     
-    # हम ट्रांजैक्शन को खुद से भेज रहे हैं, इसलिए नोड की सूची में 
-    # self.node_address को बाहर करना सुनिश्चित करें।
-    
-    nodes_to_broadcast = blockchain_instance.nodes.copy()
+    # ट्रांजैक्शन पूल के लिए भी ताज़ा नोड लिस्ट का उपयोग करना बेहतर है।
+    try:
+        _, _, nodes_to_broadcast = load_blockchain_data()
+    except Exception:
+        # यदि डिस्क से लोड नहीं हो सका, तो मेमोरी में मौजूद का उपयोग करें
+        nodes_to_broadcast = blockchain_instance.nodes.copy()
     
     logging.info(f"P2P: Broadcasting new transaction to {len(nodes_to_broadcast)} nodes.")
     
@@ -55,16 +64,27 @@ def broadcast_transaction(blockchain_instance, transaction):
 def broadcast_new_block(blockchain_instance, block):
     """
     नेटवर्क को सूचित करता है कि एक नया ब्लॉक सफलतापूर्वक माइन हो गया है।
+    🚨 Gunicorn अनुकूलता के लिए यहाँ नोड लिस्ट को डिस्क से रीलोड किया गया है।
     """
-    # हम एक नया एंडपॉइंट /blocks/new का उपयोग करेंगे जिसे हम node_api.py में जोड़ेंगे।
     endpoint = '/blocks/new'
     
     data = {
         'block': block
     }
     
-    nodes_to_broadcast = blockchain_instance.nodes.copy()
-    
+    # 🚨 महत्वपूर्ण सुधार: नोड लिस्ट को डिस्क से रीलोड करें 
+    # (ताकि Gunicorn वर्कर ताज़ा डेटा उपयोग करें)
+    try:
+        # load_blockchain_data को चेन, कठिनाई और नोड्स को रिटर्न करना चाहिए।
+        _, _, nodes_to_broadcast = load_blockchain_data()
+    except Exception as e:
+        logging.warning(f"P2P: Failed to load fresh node list from disk: {e}. Using current memory list.")
+        # यदि डिस्क से लोड नहीं हो सका, तो मेमोरी में मौजूद का उपयोग करें
+        nodes_to_broadcast = blockchain_instance.nodes.copy()
+        
     logging.info(f"P2P: Broadcasting new block {block['index']} to {len(nodes_to_broadcast)} nodes.")
     
-    broadcast_data(nodes_to_broadcast, endpoint, data)
+    success_count = broadcast_data(nodes_to_broadcast, endpoint, data)
+    
+    # यह सुनिश्चित करने के लिए कि लॉग सही हो, सफल प्रसारण की संख्या का उपयोग करें
+    logging.info(f"P2P: Successfully broadcast block {block['index']} to {success_count} nodes.")
