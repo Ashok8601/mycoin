@@ -1,7 +1,6 @@
 import json
 import os
-from typing import Tuple, List, Set, Any, Dict
-
+from typing import Optional, Dict, Any, List, Set, Tuple # <--- यह लाइन जोड़ें
 # डेटा फ़ाइल का नाम
 DATA_FILE = 'blockchain.json'
 # डेटा को प्रोजेक्ट रूट में 'data/' फ़ोल्डर में सेव करें
