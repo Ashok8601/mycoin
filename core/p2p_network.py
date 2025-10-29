@@ -1,90 +1,70 @@
 import requests
 import json
-import logging
+from typing import TYPE_CHECKING, Dict, Any, Set
 
-# यह इंपोर्ट जोड़ें (या सुनिश्चित करें कि यह utils/data_storage में मौजूद है)
+# Gunicorn वर्कर अनुकूलता के लिए data_storage से इंपोर्ट करें
 from utils.data_storage import load_blockchain_data 
 
-# नेटवर्क गतिविधि को ट्रैक करने के लिए लॉगिंग सेट करें
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+# Circular dependency से बचने के लिए
+if TYPE_CHECKING:
+    from .blockchain import Blockchain 
+else:
+    # यदि आप type checking नहीं कर रहे हैं, तो Placeholder का उपयोग करें
+    Blockchain = Any
 
-def broadcast_data(node_set, endpoint, data):
-    """
-    नेटवर्क में सभी रजिस्टर्ड नोड्स को दिए गए एंडपॉइंट पर डेटा भेजता है।
-    """
-    success_count = 0
+
+def broadcast_transaction(blockchain: 'Blockchain', transaction: Dict[str, Any]):
+    """ एक नए ट्रांजैक्शन को नेटवर्क में प्रसारित करता है। """
     
-    # सुनिश्चित करें कि node_set एक सेट है
-    if not isinstance(node_set, set):
-        logging.error("P2P: Invalid node list provided (expected set).")
-        return success_count
-
-    # प्रत्येक पड़ोसी नोड पर लूप करें
-    for node in node_set:
-        # Render URL HTTPS का उपयोग करते हैं। 
-        # http:// या https:// में से सही चुनें
-        # हम यहाँ सुरक्षा के लिए HTTPS मान रहे हैं, लेकिन Render के आंतरिक कम्युनिकेशन के लिए HTTP का भी प्रयास कर सकते हैं।
-        url = f'http://{node}{endpoint}' 
-        try:
-            # POST रिक्वेस्ट भेजकर डेटा प्रसारित करें
-            # 5 सेकंड का टाइमआउट सेट किया गया
-            response = requests.post(url, json=data, timeout=5)
-            
-            if response.status_code in [200, 201]:
-                success_count += 1
-                # logging.info(f"P2P: Successfully broadcast to {node}{endpoint}")
-            else:
-                logging.warning(f"P2P: Failed to broadcast to {node}. Status: {response.status_code}")
-                
-        except requests.exceptions.RequestException as e:
-            # कनेक्शन त्रुटियों को पकड़ें (जैसे नोड ऑफ़लाइन है)
-            logging.error(f"P2P: Node {node} is unreachable. Error: {e}")
-            
-    return success_count
-
-def broadcast_transaction(blockchain_instance, transaction):
-    """
-    एक नए ट्रांजैक्शन को सभी नोड्स पर प्रसारित करता है।
-    """
-    # /transactions/new एंडपॉइंट का उपयोग करें
-    endpoint = '/transactions/new'
-    
-    # ट्रांजैक्शन पूल के लिए भी ताज़ा नोड लिस्ट का उपयोग करना बेहतर है।
+    # ट्रांजैक्शन प्रसारण के लिए भी नोड लिस्ट रीलोड करें 
     try:
-        _, _, nodes_to_broadcast = load_blockchain_data()
+        _, _, fresh_nodes = load_blockchain_data()
+        nodes_to_broadcast = fresh_nodes
     except Exception:
-        # यदि डिस्क से लोड नहीं हो सका, तो मेमोरी में मौजूद का उपयोग करें
-        nodes_to_broadcast = blockchain_instance.nodes.copy()
-    
-    logging.info(f"P2P: Broadcasting new transaction to {len(nodes_to_broadcast)} nodes.")
-    
-    broadcast_data(nodes_to_broadcast, endpoint, transaction)
+        nodes_to_broadcast = blockchain.nodes
+
+    for node in nodes_to_broadcast:
+        # P2P URLs को सही करें
+        url = f'https://{node}/transactions/new' if 'http' not in node and 'https' not in node else f'{node}/transactions/new'
+        
+        try:
+            requests.post(url, json=transaction, timeout=2) 
+        except requests.exceptions.RequestException:
+            # प्रसारण विफल रहा, अगले नोड पर जाएँ
+            continue
 
 
-def broadcast_new_block(blockchain_instance, block):
+def broadcast_new_block(blockchain: 'Blockchain', block: Dict[str, Any]):
+    """ 
+    नए ब्लॉक को नेटवर्क में सभी नोड्स तक प्रसारित (broadcast) करता है।
     """
-    नेटवर्क को सूचित करता है कि एक नया ब्लॉक सफलतापूर्वक माइन हो गया है।
-    🚨 Gunicorn अनुकूलता के लिए यहाँ नोड लिस्ट को डिस्क से रीलोड किया गया है।
-    """
-    endpoint = '/blocks/new'
-    
-    data = {
-        'block': block
-    }
     
     # 🚨 महत्वपूर्ण सुधार: नोड लिस्ट को डिस्क से रीलोड करें 
-    # (ताकि Gunicorn वर्कर ताज़ा डेटा उपयोग करें)
+    successful_transmissions = 0
+    
     try:
-        # load_blockchain_data को चेन, कठिनाई और नोड्स को रिटर्न करना चाहिए।
-        _, _, nodes_to_broadcast = load_blockchain_data()
-    except Exception as e:
-        logging.warning(f"P2P: Failed to load fresh node list from disk: {e}. Using current memory list.")
-        # यदि डिस्क से लोड नहीं हो सका, तो मेमोरी में मौजूद का उपयोग करें
-        nodes_to_broadcast = blockchain_instance.nodes.copy()
+        _, _, fresh_nodes = load_blockchain_data()
+        nodes_to_broadcast: Set[str] = fresh_nodes
         
-    logging.info(f"P2P: Broadcasting new block {block['index']} to {len(nodes_to_broadcast)} nodes.")
-    
-    success_count = broadcast_data(nodes_to_broadcast, endpoint, data)
-    
-    # यह सुनिश्चित करने के लिए कि लॉग सही हो, सफल प्रसारण की संख्या का उपयोग करें
-    logging.info(f"P2P: Successfully broadcast block {block['index']} to {success_count} nodes.")
+    except Exception as e:
+        print(f"ERROR: Could not load fresh nodes for broadcast: {e}")
+        nodes_to_broadcast = blockchain.nodes
+        
+    # डिस्क से रीलोड की गई नोड लिस्ट पर प्रसारण करें
+    for node in nodes_to_broadcast:
+        # P2P URLs को सही करें
+        url = f'https://{node}/blocks/new' if 'http' not in node and 'https' not in node else f'{node}/blocks/new'
+
+        try:
+            response = requests.post(url, json={'block': block}, timeout=3) 
+            
+            if response.status_code == 200 or response.status_code == 201:
+                successful_transmissions += 1
+            else:
+                print(f"WARN: Could not broadcast block to {node}. Status: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            # print(f"ERROR: Failed to broadcast block to {node}. Error: {e}")
+            pass # विफल नोड्स के लिए लॉग को शांत रखें
+
+    print(f"P2P: Broadcasting new block {block['index']} to {successful_transmissions} nodes.")
+    return successful_transmissions
