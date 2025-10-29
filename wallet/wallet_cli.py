@@ -23,8 +23,13 @@ def load_wallet(filename='my_key.json'):
     path = os.path.join(WALLET_DIR, filename)
     if not os.path.exists(path):
         return None
-    with open(path, 'r') as f:
-        return json.load(f)
+    # 🌟 FIX: यहाँ load_wallet फ़ंक्शन का अधूरा लॉजिक पूरा किया गया है 🌟
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"❌ त्रुटि: वॉलेट फ़ाइल '{filename}' को पढ़ने में विफल रहा। ({e})")
+        return None
 
 def save_wallet(wallet_data, filename='my_key.json'):
     """ वॉलेट डेटा को JSON फ़ाइल में सेव करें """
@@ -112,6 +117,7 @@ def create_and_send_transaction(wallet_data):
     except requests.exceptions.ConnectionError:
         print(f"\n❌ नोड कनेक्शन त्रुटि: सुनिश्चित करें कि आपका नोड ({NODE_URL}) चल रहा है।")
     except requests.exceptions.HTTPError as e:
+        # 406 Not Acceptable (हस्ताक्षर त्रुटि या अपर्याप्त फंड) को यहाँ हैंडल किया जाता है
         print(f"\n❌ ट्रांजैक्शन त्रुटि: {e.response.json().get('message', 'Unknown error')}")
     except Exception as e:
         print(f"\n❌ एक अनपेक्षित त्रुटि हुई: {e}")
@@ -160,7 +166,7 @@ def wallet_actions_menu(wallet_data):
         print(f"\n--- वॉलेट एड्रेस: {address[:10]}... ---")
         print("1. 💰 बैलेंस देखें")
         print("2. ✍️ कॉइन भेजें (नया ट्रांजैक्शन)")
-        print("3. 📋 Public Key डिस्प्ले करें (वेब UI के लिए)") # नया विकल्प
+        print("3. 📋 Public Key डिस्प्ले करें (वेब UI के लिए)")
         print("4. ⬅️ मेन मेनू पर वापस जाएँ")
         
         choice = input("विकल्प चुनें: ")
@@ -170,7 +176,7 @@ def wallet_actions_menu(wallet_data):
         elif choice == '2':
             create_and_send_transaction(wallet_data)
         elif choice == '3':
-            display_public_address_cli(address) # नया फ़ंक्शन कॉल
+            display_public_address_cli(address)
         elif choice == '4':
             break
         else:
