@@ -21,7 +21,7 @@ from .p2p_network import broadcast_transaction, broadcast_new_block
 
 BLOCK_GENERATION_INTERVAL = 600       
 DIFFICULTY_ADJUSTMENT_INTERVAL = 2016 
-INITIAL_REWARD = 50                   
+INITIAL_REWARD = 50                 
 HALVING_INTERVAL = 210000             
 
 # ----------------------------------------------------
@@ -44,7 +44,7 @@ class Blockchain:
         else:
             # 2. यदि लोड नहीं होता है, तो जेनेसिस ब्लॉक से शुरू करें
             self.chain = []              
-            self.current_transactions = [] 
+            self.current_transactions = []
             self.nodes = set()           
             self.node_address = node_address 
             self.difficulty = 4          
@@ -98,7 +98,7 @@ class Blockchain:
         if block['index'] % DIFFICULTY_ADJUSTMENT_INTERVAL == 0:
             self.adjust_difficulty()
             
-        # 3. P2P प्रसारण
+        # 3. P2P प्रसारण (यह फ़ंक्शन अब Gunicorn वर्कर को बायपास करने के लिए `load_blockchain_data` का उपयोग करता है)
         broadcast_new_block(self, block)
             
         return block
@@ -144,7 +144,7 @@ class Blockchain:
         """किसी ब्लॉक का SHA-256 हैश बनाता है"""
         block_copy = block.copy()
         if 'transactions' in block_copy:
-             block_copy['transactions'] = sorted(block_copy['transactions'], key=lambda x: json.dumps(x, sort_keys=True))
+            block_copy['transactions'] = sorted(block_copy['transactions'], key=lambda x: json.dumps(x, sort_keys=True))
         
         block_string = json.dumps(block_copy, sort_keys=True).encode()
         return SHA256.new(block_string).hexdigest()
@@ -228,8 +228,8 @@ class Blockchain:
             self.nodes.add(parsed_url.netloc)
         elif parsed_url.path:
             # यदि केवल 'example.com' जैसा कुछ दिया गया है
-             self.nodes.add(parsed_url.path)
-             
+            self.nodes.add(parsed_url.path)
+            
     def resolve_conflicts(self) -> bool:
         """
         सर्वसम्मति एल्गोरिथम: सबसे लंबी और वैध चेन को स्वीकार करता है।
