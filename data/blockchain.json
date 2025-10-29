@@ -1,0 +1,23 @@
+{
+    "chain": [
+        {
+            "index": 1,
+            "timestamp": 1761732417.3845139,
+            "transactions": [
+                {
+                    "sender": "SYSTEM_COINBASE",
+                    "recipient": "ae5dbddfb03340aa974172a835e6a3f8",
+                    "amount": 50.0,
+                    "signature": "GENESIS_SIG"
+                }
+            ],
+            "proof": 100,
+            "previous_hash": "1",
+            "miner": "ae5dbddfb03340aa974172a835e6a3f8",
+            "difficulty": 4
+        }
+    ],
+    "difficulty": 4,
+    "nodes": [],
+    "timestamp": 1761730378.729692
+}
